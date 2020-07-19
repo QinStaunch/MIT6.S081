@@ -106,7 +106,9 @@ exec(char *path, char **argv)
   safestrcpy(p->name, last, sizeof(p->name));
 
   // DEBUG in lab xv6 lazy page allocation.
-  vmprint(pagetable);
+  if(strncmp(p->name, "init", 4) == 0){
+    vmprint(pagetable);
+  }
     
   // Commit to the user image.
   oldpagetable = p->pagetable;
