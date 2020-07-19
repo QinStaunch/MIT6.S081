@@ -200,7 +200,7 @@ bd_free(void *p) {
     int bi = blk_index(k, p);
     int buddy = (bi % 2 == 0) ? bi+1 : bi-1;
     bit_flip(bd_sizes[k].alloc, bi);  // free p at size k
-    if (bit_isset_pair(bd_sizes[k].alloc, (bi < buddy)?bi:buddy)) {  // is buddy allocated?
+    if (bit_isset_pair(bd_sizes[k].alloc, buddy)) {  // is buddy allocated?
       break;   // break out of loop
     }
     // budy is free; merge with buddy
