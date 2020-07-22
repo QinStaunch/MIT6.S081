@@ -23,10 +23,19 @@ struct {
   struct run *freelist;
 } kmem;
 
+struct {
+  struct spinlock lock;
+  char *pa_start;
+  char *ref;
+} kmem_ref;
+
+static uint64 kmemindex(void *);
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
+  initlock(&kmem_ref.lock, "kmem_ref");
   freerange(end, (void*)PHYSTOP);
 }
 
@@ -34,7 +43,10 @@ void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  p = (char*)PGROUNDUP((uint64)pa_start);
+  kmem_ref.ref = (char *)PGROUNDUP((uint64)pa_start);
+  kmem_ref.pa_start = (char *)(kmem_ref.ref+8*PGSIZE);
+  memset(kmem_ref.ref, 1, 8 * PGSIZE);
+  p = kmem_ref.pa_start;
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
 }
@@ -51,10 +63,18 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
+  r = (struct run*)pa;
+
+  acquire(&kmem_ref.lock);
+  kmem_ref.ref[kmemindex(pa)]--;
+  if(kmem_ref.ref[kmemindex(pa)] > 0){
+    release(&kmem_ref.lock);
+    return;
+  }
+  release(&kmem_ref.lock);
+
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
-
-  r = (struct run*)pa;
 
   acquire(&kmem.lock);
   r->next = kmem.freelist;
@@ -76,7 +96,28 @@ kalloc(void)
     kmem.freelist = r->next;
   release(&kmem.lock);
 
-  if(r)
+  if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
+    acquire(&kmem_ref.lock);
+    kmem_ref.ref[kmemindex(r)]++;
+    release(&kmem_ref.lock);
+  }
   return (void*)r;
+}
+
+// Util
+// Calculate the index of physical address pa in kmem.ref array.
+static uint64
+kmemindex(void *pa)
+{
+  return (uint64)(((char *)pa-kmem_ref.pa_start)/PGSIZE);
+}
+
+// Increment the reference count of physical page at physical address pa.
+void
+incref(void *pa)
+{
+  acquire(&kmem_ref.lock);
+  kmem_ref.ref[kmemindex(pa)]++;
+  release(&kmem_ref.lock);
 }
