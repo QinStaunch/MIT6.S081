@@ -163,8 +163,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    //if(*pte & PTE_V)
-      //panic("remap");
+
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -319,34 +318,18 @@ uvmfree(pagetable_t pagetable, uint64 sz)
 int
 uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 {
-  pte_t *pte;
+  pte_t *pte, *ptenew;
   uint64 pa, i;
-  uint flags;
-  //char *mem;
 
-  /*
-  for(i = 0; i < sz; i += PGSIZE){
-    if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
-    if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
-    pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
-      goto err;
-    }
-  }
-  */
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0){
       panic("uvmcopy: pte should exist");
     }
     if((*pte & PTE_V) == 0){
       panic("uvmcopy: page not present");
+    }
+    if((ptenew = walk(new, i, 1)) == 0){
+      goto err;
     }
     // Clear the PTE_W in the PTEs of both new and old pagetable.
     if((*pte & PTE_W) != 0){
@@ -356,10 +339,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       *pte |= PTE_COW;
     }
     pa = PTE2PA(*pte);
-    flags = PTE_FLAGS(*pte);
-    if(mappages(new, i, PGSIZE, pa, flags) != 0){
-      goto err;
-    }
+    *ptenew = *pte;
     incref((void *)pa);
   }
   return 0;
@@ -392,6 +372,8 @@ uvmcow(pagetable_t pagetable, uint64 va)
   uint64 pa;
   uint flag;
 
+  // We have to do this check, or the test case "pgbug" in "usertests"
+  // will fail.
   if(va > MAXVA){
     return -1;
   }
@@ -404,8 +386,7 @@ uvmcow(pagetable_t pagetable, uint64 va)
     return -1;
   }
   pa = PTE2PA(*pte);
-  flag = PTE_FLAGS(*pte)^PTE_COW;
-  flag |= PTE_W;
+  flag = (PTE_FLAGS(*pte)^PTE_COW)|PTE_W;
   memmove(mem, (void *)pa, PGSIZE);
   if(mappages(pagetable, va, PGSIZE, (uint64)mem, flag) != 0){
     kfree(mem);

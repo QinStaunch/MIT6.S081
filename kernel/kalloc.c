@@ -43,9 +43,12 @@ void
 freerange(void *pa_start, void *pa_end)
 {
   char *p;
-  kmem_ref.ref = (char *)PGROUNDUP((uint64)pa_start);
-  kmem_ref.pa_start = (char *)(kmem_ref.ref+8*PGSIZE);
-  memset(kmem_ref.ref, 1, 8 * PGSIZE);
+  uint64 num;
+
+  kmem_ref.ref = (char *)end;
+  num = (uint64)(((char *)PHYSTOP-end)>>PGSHIFT) * sizeof(char);
+  kmem_ref.pa_start = (char *)PGROUNDUP((uint64)(end + num));
+  memset(end, 1, num);
   p = kmem_ref.pa_start;
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
@@ -99,7 +102,7 @@ kalloc(void)
   if(r){
     memset((char*)r, 5, PGSIZE); // fill with junk
     acquire(&kmem_ref.lock);
-    kmem_ref.ref[kmemindex(r)]++;
+    kmem_ref.ref[kmemindex(r)] = 1;
     release(&kmem_ref.lock);
   }
   return (void*)r;
@@ -110,7 +113,7 @@ kalloc(void)
 static uint64
 kmemindex(void *pa)
 {
-  return (uint64)(((char *)pa-kmem_ref.pa_start)/PGSIZE);
+  return (uint64)(((char *)pa-kmem_ref.pa_start)>>PGSHIFT);
 }
 
 // Increment the reference count of physical page at physical address pa.
