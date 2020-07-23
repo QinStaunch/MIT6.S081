@@ -45,10 +45,10 @@ freerange(void *pa_start, void *pa_end)
   char *p;
   uint64 num;
 
-  kmem_ref.ref = (char *)end;
-  num = (uint64)(((char *)PHYSTOP-end)>>PGSHIFT) * sizeof(char);
-  kmem_ref.pa_start = (char *)PGROUNDUP((uint64)(end + num));
-  memset(end, 1, num);
+  kmem_ref.ref = (char *)pa_start;
+  num = (uint64)(((char *)pa_end-(char *)pa_start)>>PGSHIFT) * sizeof(char);
+  kmem_ref.pa_start = (char *)PGROUNDUP((uint64)(pa_start + num));
+  memset(pa_start, 1, num);
   p = kmem_ref.pa_start;
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
